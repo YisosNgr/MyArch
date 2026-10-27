@@ -33,7 +33,7 @@ MyArch parte de **Arch Linux ya instalado** con usuario, red, Bash, Python 3.11+
 6. `./installer.sh apply` muestra el plan, exige escribir su identificador y solicita privilegios únicamente para pacman. La aplicación real está bloqueada en el equipo de origen.
 7. Verifica: `./installer.sh validate --plan latest`.
 
-El motor instala únicamente raíces explícitas observadas, compatibles y disponibles en repositorios revisados; pacman resuelve dependencias. Usa versiones actuales y una transacción completa `pacman -Syu --needed` en el **destino confirmado**, con el prompt propio de pacman. Esa operación no se ha ejecutado durante el desarrollo. No ejecuta gestores AUR ni recetas descargadas. Las acciones manuales permanecen visibles; una reconstrucción parcial nunca se declara completa.
+El motor instala únicamente raíces explícitas observadas, compatibles y disponibles en repositorios revisados; pacman resuelve dependencias. Usa versiones actuales y una transacción completa `pacman -Syu --needed` en el **destino confirmado**, con el prompt propio de pacman. Esa operación no se ha ejecutado durante el desarrollo. No ejecuta gestores AUR ni recetas descargadas. Las acciones manuales permanecen visibles; una reconstrucción parcial nunca se declara completa y apply devuelve código 1 si la validación queda incompleta.
 
 ## Perfiles y operaciones
 
@@ -61,8 +61,8 @@ El código y las políticas se conservan en Git; los bundles privados conservan 
 
 ## Verificación y límites
 
-`./scripts/test.sh` ejecuta comprobación sintáctica Bash y pruebas offline de secretos, procedencia, perfiles, hashes, rutas, symlinks, planificación, staging, backups, interrupciones, reanudación, rollback e importación. La integración de pacman se prueba mediante un sustituto simulado; las pruebas no instalan nada. ShellCheck se ejecuta si ya existe. No se ha realizado una instalación real en VM o portátil ni una comparación visual de sesiones restauradas.
+`./scripts/test.sh` ejecuta comprobación sintáctica Bash y pruebas offline de secretos, procedencia, perfiles, hashes, rutas, symlinks, planificación, staging, backups, interrupciones, reanudación, rollback e importación. La integración de pacman se prueba mediante un sustituto simulado; las pruebas no instalan nada. Si Bubblewrap ya está disponible, también ejecuta la CLI y el menú en procesos y terminales reales, con el anfitrión en solo lectura y sin red; solo pacman y el hardware de destino se simulan. ShellCheck se ejecuta si ya existe. No se ha realizado una instalación real en VM o portátil ni una comparación visual de sesiones restauradas.
 
 El análisis estático no puede demostrar todas las dependencias de Lua, comandos autostart o configuraciones generadas. AUR, otros gestores, servicios, drivers, SDDM, fuentes/recursos sin licencia confirmada, plugins de Neovim y rutas dependientes del usuario pueden requerir intervención. Estas limitaciones figuran en los manifiestos y planes, no se ocultan bajo un estado de éxito.
 
-Documentación: [arquitectura](docs/ARCHITECTURE.md), [instalación](docs/INSTALLATION.md), [paquetes](docs/PACKAGES.md), [dotfiles](docs/DOTFILES.md), [perfiles](docs/PROFILES.md), [seguridad](docs/SECURITY.md), [recuperación](docs/RECOVERY.md), [problemas](docs/TROUBLESHOOTING.md), [cobertura](docs/COVERAGE.md).
+Documentación: [arquitectura](docs/ARCHITECTURE.md), [instalación](docs/INSTALLATION.md), [paquetes](docs/PACKAGES.md), [dotfiles](docs/DOTFILES.md), [perfiles](docs/PROFILES.md), [seguridad](docs/SECURITY.md), [recuperación](docs/RECOVERY.md), [problemas](docs/TROUBLESHOOTING.md), [cobertura](docs/COVERAGE.md), [pruebas](docs/TESTING.md), [plan de VM](docs/VM_TEST_PLAN.md).

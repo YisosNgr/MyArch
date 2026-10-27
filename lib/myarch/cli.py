@@ -17,7 +17,11 @@ def confirmation(phrase):
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         raise ValueError('Live changes require an interactive terminal and explicit confirmation')
     print('Esta operación modifica el destino. Revisa el plan y sus acciones pendientes.')
-    if input('Escribe '+phrase+' para continuar: ').strip()!=phrase:
+    try:
+        entered=input('Escribe '+phrase+' para continuar: ').strip()
+    except EOFError as exc:
+        raise ValueError('Operation cancelled: confirmation input closed') from exc
+    if entered!=phrase:
         raise ValueError('Operation cancelled; no deployment performed')
 
 
@@ -120,6 +124,8 @@ def main():
         elif args.command=='report':result=report()
         print(json.dumps(result,ensure_ascii=False,indent=2))
         if args.command=='validate' and (not result['integrity_ok'] or result['deployment_ok'] is False):
+            return 1
+        if args.command=='apply' and not result['validation']['deployment_ok']:
             return 1
         if args.command=='bundle-check' and not result['valid']:
             return 1

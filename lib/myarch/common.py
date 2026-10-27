@@ -82,7 +82,17 @@ def atomic_bytes(path, data, mode=0o600):
 
 
 def read_json(path):
-    return json.loads(Path(path).read_text())
+    def unique_object(pairs):
+        result={}
+        for key,value in pairs:
+            if key in result:
+                raise ValueError('Duplicate JSON key in project data')
+            result[key]=value
+        return result
+    data=json.loads(Path(path).read_text(),object_pairs_hook=unique_object)
+    if not isinstance(data,dict):
+        raise ValueError('Project JSON document must be an object: '+Path(path).name)
+    return data
 
 
 def inside(path, parent):

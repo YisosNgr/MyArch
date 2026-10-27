@@ -23,6 +23,7 @@ class Isolated(unittest.TestCase):
         self.config=self.home/'.config'
         self.config.mkdir(parents=True)
         self.stack=contextlib.ExitStack()
+        self.stack.enter_context(patch.dict(os.environ, {'PATH':'/usr/bin', 'HOME':str(self.home)}, clear=True))
         for mod in [common,audit,snapshot,plan,engine,validation,discovery,resources]:
             for attr,value in [('ROOT',self.root),('HOME',self.home),('CONFIG',self.config)]:
                 if hasattr(mod,attr):

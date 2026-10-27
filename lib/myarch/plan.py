@@ -46,6 +46,17 @@ def profiles(names):
             return
         active.add(name)
         d = read_json(inside(ROOT/'config/profiles'/f'{name}.json', ROOT/'config/profiles'))
+        for key in ['extends','categories','dotfiles','only_packages']:
+            values=d.get(key,[])
+            if not isinstance(values,list) or any(not isinstance(v,str) or not v for v in values):
+                raise ValueError('Profile '+name+' requires a list of strings for '+key)
+        if set(d.get('categories',[])) - {'core','desktop','development','cybersecurity','gaming','multimedia'}:
+            raise ValueError('Profile '+name+' has an unknown package category')
+        if set(d.get('dotfiles',[])) - {'all','desktop','development','gaming','multimedia'}:
+            raise ValueError('Profile '+name+' has an unknown dotfiles category')
+        for key in ['hardware_review','services_review']:
+            if key in d and type(d[key]) is not bool:
+                raise ValueError('Profile '+name+' requires a boolean for '+key)
         for parent in d.get('extends', []):
             visit(parent)
         categories.update(d.get('categories', []))
@@ -72,6 +83,36 @@ def file_category(path):
     return 'desktop'
 
 
+def external_application_actions(document, categories):
+    """Expose observed managers that need manual origin/version/permission review."""
+    result=[]
+    developer_managers={'pip','pipx','npm','pnpm','yarn','cargo','rustup','vscode-extension'}
+    for item in document.get('inventory',[]):
+        manager=item.get('manager')
+        name=None
+        category='development'
+        if manager=='flatpak' and item.get('kind')=='app':
+            app=item['name']
+            lowered=app.lower()
+            category=('gaming' if re.search(r'steam|heroic|lutris|wine|proton',lowered) else
+                      'development' if re.search(r'vscode|codium|visualstudio|jetbrains',lowered) else
+                      'multimedia' if re.search(r'obsstudio|mpv|vlc|blender|gimp|krita|sunshine',lowered) else 'desktop')
+            name='flatpak:'+item.get('scope','unknown')+':'+app
+        elif manager=='vscode-extension':
+            name='vscode-extension:'+item['name']
+        elif manager in developer_managers and item.get('inventory','').strip():
+            name=manager+':observed-inventory'
+        elif manager=='manual_or_source_or_sdk' and item.get('entries'):
+            name='manual:'+item['directory']
+            category='core'
+        if name and category in categories:
+            result.append({'kind':'application','name':name,'manager':manager,
+                           'category':category,'status':'Requires manual action',
+                           'reason':'review_external_origin_version_permissions_and_restore_method',
+                           'evidence':'manifests/applications.json'})
+    return result
+
+
 def target_file(logical, home=None, config=None):
     home = HOME if home is None else home
     config = CONFIG if config is None else config
@@ -93,6 +134,11 @@ def inventory():
 def make_plan(names, snapshot_id='latest'):
     packages = read_json(ROOT/'manifests/packages.json')
     policy = read_json(ROOT/'config/policy.json')
+    trusted=policy.get('trusted_repositories')
+    if not isinstance(trusted,list) or any(not isinstance(r,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*',r) for r in trusted):
+        raise ValueError('Policy trusted_repositories must be a list of valid repository names')
+    if not isinstance(packages.get('packages'),list) or any(not isinstance(p,dict) for p in packages['packages']):
+        raise ValueError('Package inventory requires a list of package objects')
     categories, configs, only, info = profiles(names)
     snapshot = load_snapshot(snapshot_id)
     errors = verify(snapshot)
@@ -147,6 +193,9 @@ def make_plan(names, snapshot_id='latest'):
                 if a['target_before'] == e['sha256'] and a['target_before_mode'] == e['mode']:
                     a.update(status='Skipped', reason='identical_content')
         actions.append(a)
+    apps_path=ROOT/'manifests/applications.json'
+    if apps_path.exists():
+        actions.extend(external_application_actions(read_json(apps_path),categories))
     if any(p['services_review'] for p in info):
         svc_path=ROOT/'manifests/services.json'
         if svc_path.exists():

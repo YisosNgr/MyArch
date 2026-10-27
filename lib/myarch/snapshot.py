@@ -20,6 +20,8 @@ def logical_path(path):
 
 
 def safe_relative(value):
+    if not isinstance(value,str) or not value or any(ord(c)<32 or ord(c)==127 for c in value):
+        raise ValueError('Invalid relative path')
     p = Path(value)
     if p.is_absolute() or '..' in p.parts or not p.parts or str(p) != value or '\\' in value:
         raise ValueError('Invalid relative path')
@@ -40,12 +42,18 @@ def load_snapshot(identifier='latest'):
     if not re.fullmatch(r'[0-9TZ-]+-[a-f0-9]{12}', identifier):
         raise ValueError('Invalid snapshot ID')
     data = read_json(inside(ROOT/'dotfiles/snapshots'/f'{identifier}.json', ROOT/'dotfiles/snapshots'))
-    if data['id'] != identifier:
-        raise ValueError('Snapshot identity mismatch')
-    expected = snapshot_digest(data)[:12] if data['schema'] == 2 else digest(str(data['entries']).encode())[:12]
-    if identifier.rsplit('-',1)[1] != expected:
-        raise ValueError('Snapshot metadata checksum mismatch')
+    check_snapshot_metadata(data, identifier)
     return data
+
+
+def check_snapshot_metadata(data, identifier):
+    if not isinstance(data,dict) or type(data.get('schema')) is not int or data['schema'] not in {1,2}:
+        raise ValueError('Unsupported snapshot schema')
+    if data.get('id')!=identifier or not isinstance(data.get('entries'),list):
+        raise ValueError('Snapshot identity or entries mismatch')
+    expected=snapshot_digest(data)[:12] if data['schema']==2 else digest(str(data['entries']).encode())[:12]
+    if identifier.rsplit('-',1)[1]!=expected:
+        raise ValueError('Snapshot metadata checksum mismatch')
 
 
 def snapshot_digest(data):
@@ -97,20 +105,37 @@ def capture():
     return {'id': ident, 'captured': len(accepted), 'private_reference_resources': len(resources), 'excluded': excluded}
 
 
-def verify(snapshot):
-    errors = verify_resources(snapshot.get('resources', []))
+def verify(snapshot, object_reader=None, resource_reader=None):
+    if not isinstance(snapshot,dict) or not isinstance(snapshot.get('entries'),list):
+        return [{'error':'Invalid snapshot entries'}]
+    errors = verify_resources(snapshot.get('resources', []), resource_reader)
     paths = set()
     for e in snapshot['entries']:
         try:
+            if not isinstance(e,dict):
+                raise ValueError('Invalid snapshot entry')
             safe_relative(e['path'])
             if e['path'] in paths:
                 raise ValueError('Duplicate snapshot destination')
+            if any(e['path'].startswith(p+'/') or p.startswith(e['path']+'/') for p in paths):
+                raise ValueError('Conflicting parent and child destinations')
             paths.add(e['path'])
+            mode=e.get('mode')
+            if type(mode) is not int or mode<0 or mode & ~0o755:
+                raise ValueError('Invalid snapshot permission mode')
             p = blob_path(e['sha256'])
-            if p.is_symlink() or digest(p.read_bytes()) != e['sha256']:
+            if object_reader is None:
+                if p.is_symlink():
+                    raise ValueError('Object symlink is forbidden')
+                data=p.read_bytes()
+            else:
+                data=object_reader(e['sha256'])
+            if digest(data)!=e['sha256']:
                 raise ValueError('Object checksum mismatch')
-            if sensitive(e['path'], p.read_bytes()):
+            if type(e.get('size')) is not int or e['size']!=len(data):
+                raise ValueError('Object size mismatch')
+            if sensitive(e['path'],data):
                 raise ValueError('Possible secret in snapshot')
-        except (OSError, ValueError) as exc:
-            errors.append({'path': e.get('path'), 'error': str(exc)})
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            errors.append({'path':e.get('path') if isinstance(e,dict) else None,'error':str(exc)})
     return errors

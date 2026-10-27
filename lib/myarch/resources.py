@@ -59,15 +59,28 @@ def capture_references(applications):
     return resources
 
 
-def verify_resources(resources):
+def verify_resources(resources, reader=None):
+    if not isinstance(resources,list):
+        return [{'error':'Invalid resources list'}]
     failures=[]
     for r in resources:
         try:
-            p=resource_path(r['sha256'])
-            if p.is_symlink() or digest(p.read_bytes())!=r['sha256']:
-                raise ValueError('Resource checksum mismatch')
-            if Path(r['name']).name!=r['name'] or r['name'] in {'.','..'}:
+            if not isinstance(r,dict):
+                raise ValueError('Invalid resource entry')
+            name=r.get('name')
+            if not isinstance(name,str) or not name or Path(name).name!=name or name in {'.','..'} or any(ord(c)<32 or ord(c)==127 for c in name):
                 raise ValueError('Invalid resource display name')
-        except (ValueError,OSError) as exc:
-            failures.append({'resource':r.get('name'),'error':str(exc)})
+            p=resource_path(r['sha256'])
+            if reader is None:
+                if p.is_symlink():
+                    raise ValueError('Resource symlink is forbidden')
+                data=p.read_bytes()
+            else:
+                data=reader(r['sha256'])
+            if digest(data)!=r['sha256']:
+                raise ValueError('Resource checksum mismatch')
+            if type(r.get('size')) is not int or r['size']!=len(data):
+                raise ValueError('Resource size mismatch')
+        except (ValueError,OSError,KeyError,TypeError) as exc:
+            failures.append({'resource':r.get('name') if isinstance(r,dict) else None,'error':str(exc)})
     return failures

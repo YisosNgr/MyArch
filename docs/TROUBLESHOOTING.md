@@ -8,7 +8,7 @@
 | Apply bloqueado en origen | Protección esperada. Usar stage para probar sin tocar la instalación |
 | /boot no accesible | Revisar la advertencia del inventario; no elevar toda la auditoría |
 | Possible secret / archivo excluido | Revisar localmente; no retirar el filtro de forma global |
-| Cambió desde audit | Volver a auditar y capturar; no modificar el snapshot firmado por hash |
+| Cambió desde audit | Volver a auditar y capturar; no modificar el índice del snapshot protegido por hash |
 | Snapshot/plan checksum mismatch | Recuperar un bundle válido o regenerar desde las fuentes revisadas |
 | Stage already exists | Elegir --dest "$PWD/staging/otro-nombre"; no se sobrescribe un staging anterior |
 | Another MyArch operation is running | Esperar; flock se libera al terminar o morir el proceso |
@@ -18,6 +18,6 @@
 | Import inventario diferente | Recuperar en otro checkout nuevo; no se reemplaza el inventario existente |
 | Drift de versión | Dato esperado en rolling release; no implica downgrade |
 | validate sin --plan devuelve integrity_ok | Solo comprueba el backup; no certifica la sesión o instalación destino |
-| validate --plan termina con código 1 | Hay diferencias, fallos o acciones manuales; revisar reports/validation.json |
+| apply / validate --plan terminan con código 1 | Hay diferencias, fallos o acciones manuales; revisar reports/validation.json |
 
 Los fallos de consultas figuran con argv y código de salida en audit-report.json; stderr no se persiste porque puede contener información personal. Los módulos no disponibles se distinguen de una consulta confirmada sin resultados. Algunas herramientas devuelven código distinto de cero para conjuntos vacíos (por ejemplo huérfanos): consulta la evidencia, no interpretes cada resultado como una avería.

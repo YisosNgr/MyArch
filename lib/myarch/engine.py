@@ -1,5 +1,6 @@
 """Transactional file deployment, destination-only package application and rollback."""
 import fcntl
+import json
 import os
 from pathlib import Path
 import re
@@ -8,7 +9,7 @@ import tempfile
 from contextlib import contextmanager
 from .common import ROOT, HOME, CONFIG, now, atomic_json, atomic_bytes, read_json, digest, inside, sensitive
 from .resources import resource_path
-from .snapshot import load_snapshot, verify, blob_path, safe_relative
+from .snapshot import load_snapshot, verify, blob_path, safe_relative, check_snapshot_metadata
 from .plan import (load_plan, target_file, host_fingerprint, require_destination_host,
                    inventory)
 from .common import run
@@ -122,7 +123,7 @@ def deploy(entries,tx,progress=True):
             save(tx)
             continue
         elif item['existed']:
-            if not dest.is_file() or digest(dest.read_bytes())!=item['before_sha256']:
+            if not dest.is_file() or digest(dest.read_bytes())!=item['before_sha256'] or (dest.stat().st_mode & 0o777)!=item['before_mode']:
                 raise ValueError('Destination changed after backup; refusing overwrite')
         elif dest.exists():
             raise ValueError('A new destination appeared after the transaction began')
@@ -183,15 +184,25 @@ def apply(plan_id='latest',resume=None):
         tx=read_json(transaction_path(resume))
         if tx['kind']!='apply' or tx['plan']!=plan['id'] or tx['target_host']!=host_fingerprint() or tx['home']!=str(HOME) or tx['config']!=str(CONFIG):
             raise ValueError('Resume transaction does not match this target and plan')
-        if tx['status']=='Rolled back':
-            raise ValueError('Cannot resume a rolled-back transaction')
+        if tx['status'] in {'Rolled back','Rolling back'} or any(i['status'] in {'Rolling back','Rolled back'} for i in tx['files'].values()):
+            raise ValueError('Cannot resume a rolled-back or partially rolled-back transaction')
     else:
         tx=new_transaction('apply',plan['id'],HOME,CONFIG)
     save(tx)
     try:
         targets=[]
         current=inventory()
-        # Preflight all file destinations before invoking a privileged transaction.
+        # Preflight completed and interrupted writes before any package mutation.
+        for logical,item in tx['files'].items():
+            dest=target_file(logical)
+            no_symlinks(dest,CONFIG if logical.startswith('config/') else HOME)
+            actual=(digest(dest.read_bytes()),dest.stat().st_mode & 0o777) if dest.is_file() else (None,None)
+            desired=(item['sha256'],item['mode'])
+            before=(item.get('before_sha256'),item.get('before_mode')) if item['existed'] else (None,None)
+            acceptable={desired} if item['status'] in {'Installed','Skipped'} else {desired,before}
+            if actual not in acceptable:
+                raise ValueError('Previously recorded destination changed; refusing resume before package mutation')
+        # Preflight all remaining file destinations before invoking a privileged transaction.
         for a in plan['actions']:
             if a['kind']=='file' and a['status'] in {'Pending','Skipped'} and a['path'] not in tx['files']:
                 dest=target_file(a['path'])
@@ -208,6 +219,14 @@ def apply(plan_id='latest',resume=None):
                 if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._-]*/[a-zA-Z0-9][a-zA-Z0-9@._+:-]*',target):
                     raise ValueError('Invalid qualified package target')
                 targets.append(target)
+        # A failed upgrade may have installed its roots before failing elsewhere.
+        # Re-run that reviewed transaction instead of mistaking it for completion.
+        if tx['packages']['status'] in {'Installing','Failed'}:
+            pending_targets=tx['packages'].get('targets',[])
+            allowed={a.get('target') for a in plan['actions'] if a['kind']=='package' and a['status']=='Pending'}
+            if any(t not in allowed for t in pending_targets):
+                raise ValueError('Interrupted package targets differ from the plan')
+            targets=list(dict.fromkeys([*pending_targets,*targets]))
         if targets:
             trusted=read_json(ROOT/'config/policy.json')['trusted_repositories']
             configured=run(['pacman-conf','--repo-list'])
@@ -226,7 +245,7 @@ def apply(plan_id='latest',resume=None):
             if any(t.partition('/')[2] not in current for t in targets):
                 raise ValueError('Package verification failed')
             tx['packages']['status']='Installed'
-        else:
+        elif tx['packages']['status']!='Installed':
             tx['packages']={'status':'Skipped','reason':'no_missing_automatic_package_targets'}
         save(tx)
         deploy(entries,tx)
@@ -236,6 +255,8 @@ def apply(plan_id='latest',resume=None):
         return tx
     except BaseException:
         tx['status']='Failed'
+        if tx['packages']['status']=='Installing':
+            tx['packages']['status']='Failed'
         save(tx)
         raise
 
@@ -255,13 +276,13 @@ def rollback(identifier):
     # Validate all destinations before any rollback writes, including crash recovery.
     done = set()
     for logical,item in tx['files'].items():
-        if item['status'] not in {'Installed','Installing','Rolling back'}:
+        if item['status'] not in {'Pending','Installed','Installing','Rolling back'}:
             continue
         dest=target_file(logical,home,config)
         no_symlinks(dest,config if logical.startswith('config/') else home)
         current=(digest(dest.read_bytes()),dest.stat().st_mode & 0o777) if dest.is_file() else (None,None)
         before=(item['before_sha256'],item['before_mode']) if item['existed'] else (None,None)
-        if item['status']=='Rolling back' and current==before:
+        if item['status'] in {'Pending','Installing','Rolling back'} and current==before:
             done.add(logical)
         elif current!=(item['sha256'],item.get('mode',current[1])):
             raise ValueError('Destination changed after deployment; manual recovery required')
@@ -269,8 +290,10 @@ def rollback(identifier):
             backup=inside(ROOT/safe_relative(item['backup']),ROOT/'backups'/identifier)
             if backup.is_symlink() or digest(backup.read_bytes())!=item['before_sha256']:
                 raise ValueError('Backup integrity failure')
+    tx['status']='Rolling back'
+    save(tx)
     for logical,item in reversed(list(tx['files'].items())):
-        if item['status'] not in {'Installed','Installing','Rolling back'}:
+        if item['status'] not in {'Pending','Installed','Installing','Rolling back'}:
             continue
         dest=target_file(logical,home,config)
         boundary=config if logical.startswith('config/') else home
@@ -321,7 +344,11 @@ def check_bundle(directory):
     failures=[]
     for rel,sha in data['files'].items():
         p=inside(base/safe_relative(rel),base)
-        if p.is_symlink() or digest(p.read_bytes())!=sha:
+        try:
+            valid=not p.is_symlink() and digest(p.read_bytes())==sha
+        except OSError:
+            valid=False
+        if not valid:
             failures.append(rel)
     return {'valid':not failures,'failures':failures,'capture':data['capture']}
 
@@ -355,6 +382,24 @@ def import_bundle(directory):
     required={'state/source-host.json',f'dotfiles/snapshots/{capture_id}.json','manifests/packages.json'}
     if not required.issubset(meta['files']):
         raise ValueError('Incomplete bundle')
+    # Validate the complete imported document and its objects before the first write.
+    source_data={str(dest.relative_to(ROOT)):data for dest,data in sources}
+    try:
+        imported=json.loads(source_data[f'dotfiles/snapshots/{capture_id}.json'])
+        check_snapshot_metadata(imported,capture_id)
+        errors=verify(imported,
+                      lambda sha:source_data['dotfiles/objects/'+sha],
+                      lambda sha:source_data['assets/objects/'+sha])
+        guard=json.loads(source_data['state/source-host.json'])
+        if not isinstance(guard,dict) or not isinstance(guard.get('machine_hash'),str) or not re.fullmatch(r'[a-f0-9]{64}',guard['machine_hash']):
+            raise ValueError('Invalid source identity in bundle')
+        packages=json.loads(source_data['manifests/packages.json'])
+        if not isinstance(packages,dict) or not isinstance(packages.get('packages'),list):
+            raise ValueError('Invalid package inventory in bundle')
+    except (KeyError,TypeError,json.JSONDecodeError) as exc:
+        raise ValueError('Incomplete or invalid bundle documents') from exc
+    if errors:
+        raise ValueError('Imported snapshot did not validate: '+str(errors))
     for dest,data in sources:
         atomic_bytes(dest,data)
     snap=load_snapshot(capture_id)

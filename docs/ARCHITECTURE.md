@@ -6,7 +6,7 @@ Bash ofrece el punto de entrada, la interfaz opcional Gum, el bootstrap y la ún
 | --- | --- |
 | installer.sh | Ayuda independiente, menú, perfiles y despacho |
 | bootstrap.sh | Comprobación sin instalación |
-| modules/packages.sh | Transacción de pacman después de autorización en destino |
+| modules/packages.sh / worker.py | Segunda comprobación de autorización junto a la frontera de privilegios; transacción de pacman en destino |
 | lib/myarch/common.py | Consultas sin shell, límites de escritura, hashes y detección de secretos |
 | audit.py / discovery.py | Inventarios, metadatos de pacman, grafo estático Lua/Hyprland y recursos |
 | snapshot.py / resources.py | Capturas exactas y referencias privadas con hashes |

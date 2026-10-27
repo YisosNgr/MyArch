@@ -65,8 +65,15 @@ class Audit:
         all_pkgs = self.query(['pacman', '-Q'])
         if self.evidence[-1]['status'] != 'ok' or not all_pkgs.strip():
             raise ValueError('Required pacman inventory is unavailable; previous manifests have been preserved')
-        explicit = set(self.query(['pacman', '-Qeq']).splitlines())
-        foreign = set(self.query(['pacman', '-Qmq']).splitlines())
+        def selection(option):
+            text=self.query(['pacman',option])
+            evidence=self.evidence[-1]
+            empty_set=evidence['returncode']==1 and not text
+            if evidence['status']!='ok' and not empty_set:
+                raise ValueError('Required pacman classification is unavailable; previous manifests have been preserved')
+            return set(text.splitlines())
+        explicit = selection('-Qeq')
+        foreign = selection('-Qmq')
         orphans = set(self.query(['pacman', '-Qdtq']).splitlines())
         groups = {}
         for line in self.query(['pacman', '-Qg']).splitlines():

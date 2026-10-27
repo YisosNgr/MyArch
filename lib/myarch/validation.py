@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from .common import ROOT, now, run, atomic_json, digest, expand_path, read_json
 from .snapshot import load_snapshot, verify
+from . import plan as plan_context
 from .plan import load_plan, target_file, inventory, host_fingerprint
 
 
@@ -37,7 +38,7 @@ def validate(snapshot_id='latest',plan_id=None):
             'integrity_ok':not errors,'scope':'stored_snapshot', 'deployment_ok':None}
     if plan_id:
         plan=load_plan(plan_id)
-        if plan['capture']!=snapshot['id'] or plan['target_host']!=host_fingerprint():
+        if plan['capture']!=snapshot['id'] or plan['target_host']!=host_fingerprint() or plan['target_home']!=str(plan_context.HOME) or plan['target_config']!=str(plan_context.CONFIG):
             raise ValueError('Validation plan does not match capture or current destination')
         checks=[]
         installed=inventory()
