@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "categories": [],
+  "dotfiles": [
+    "all"
+  ],
+  "description": "Restauración de configuración sin instalar paquetes."
+}

@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "extends": [
+    "desktop"
+  ],
+  "only_packages": [
+    "hyprland",
+    "caelestia-shell",
+    "caelestia-cli",
+    "quickshell-git",
+    "foot",
+    "fish",
+    "fastfetch",
+    "starship",
+    "xdg-desktop-portal-hyprland",
+    "pipewire",
+    "wireplumber"
+  ],
+  "description": "Raíces reducidas intersectadas con el inventario; dependencias mediante pacman."
+}

@@ -1,0 +1,13 @@
+# Local inventories, snapshots and transactions require privacy review before sharing.
+/manifests/
+/packages/
+/dotfiles/
+/assets/
+/state/
+/backups/
+/reports/
+/staging/
+__pycache__/
+*.pyc
+.pytest_cache/
+/tests/.tmp/

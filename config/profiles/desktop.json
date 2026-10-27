@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "categories": [
+    "desktop"
+  ],
+  "dotfiles": [
+    "desktop"
+  ],
+  "description": "Escritorio y apariencia detectados."
+}

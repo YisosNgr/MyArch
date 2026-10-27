@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "trusted_repositories": ["core", "extra", "multilib"],
+  "package_roots": "observed_explicit",
+  "foreign_packages": "manual_recipe_review",
+  "hardware": "manual",
+  "services": "manual_enable_only",
+  "assets": "license_review_before_copy",
+  "source_host_apply": "forbidden"
+}

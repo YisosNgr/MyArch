@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "categories": [
+    "gaming"
+  ],
+  "dotfiles": [
+    "gaming"
+  ],
+  "description": "Aplicaciones gaming; excluye juegos y prefijos Wine."
+}

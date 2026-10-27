@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "categories": [
+    "development"
+  ],
+  "dotfiles": [
+    "development"
+  ],
+  "description": "Herramientas de desarrollo detectadas."
+}

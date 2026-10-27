@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "categories": [],
+  "dotfiles": [],
+  "services_review": true,
+  "description": "Plan de servicios observados; no activa ni reinicia automáticamente."
+}

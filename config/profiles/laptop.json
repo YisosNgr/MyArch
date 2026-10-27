@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "extends": [
+    "desktop"
+  ],
+  "hardware_review": true,
+  "description": "Escritorio con revisión obligatoria de GPU híbrida, energía y monitores."
+}
