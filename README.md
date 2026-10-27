@@ -66,3 +66,4 @@ El código y las políticas se conservan en Git; los bundles privados conservan 
 El análisis estático no puede demostrar todas las dependencias de Lua, comandos autostart o configuraciones generadas. AUR, otros gestores, servicios, drivers, SDDM, fuentes/recursos sin licencia confirmada, plugins de Neovim y rutas dependientes del usuario pueden requerir intervención. Estas limitaciones figuran en los manifiestos y planes, no se ocultan bajo un estado de éxito.
 
 Documentación: [arquitectura](docs/ARCHITECTURE.md), [instalación](docs/INSTALLATION.md), [paquetes](docs/PACKAGES.md), [dotfiles](docs/DOTFILES.md), [perfiles](docs/PROFILES.md), [seguridad](docs/SECURITY.md), [recuperación](docs/RECOVERY.md), [problemas](docs/TROUBLESHOOTING.md), [cobertura](docs/COVERAGE.md), [pruebas](docs/TESTING.md), [plan de VM](docs/VM_TEST_PLAN.md).
+# MyArch
