@@ -3,6 +3,7 @@
 The CLI, confirmations, locks and Bash worker are real. Only package commands
 and hardware identities are fixtures. No host package manager can be executed.
 """
+import errno
 import json
 import os
 from pathlib import Path
@@ -13,9 +14,42 @@ import subprocess
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
 BWRAP=shutil.which('bwrap')
+
+
+def package_tool_mounts(fixtures, system_bin=Path('/usr/bin')):
+    mounts = []
+    for name in ('pacman', 'sudo'):
+        # Resolve alternatives on the host before the sandbox masks /etc.
+        executable = (system_bin/name).resolve()
+        if executable.is_file():
+            mounts.extend(('--ro-bind', str(fixtures/name), str(executable)))
+    return mounts
+
+
+class BubblewrapMounts(unittest.TestCase):
+    def test_replaces_sudo_binary_behind_distro_alternatives_chain(self):
+        (ROOT/'tests/.tmp').mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=ROOT/'tests/.tmp') as directory:
+            root = Path(directory)
+            bin_dir = root/'usr/bin'
+            bin_dir.mkdir(parents=True)
+            alternatives = root/'etc/alternatives'
+            alternatives.mkdir(parents=True)
+            real_sudo = bin_dir/'sudo-rs'
+            real_sudo.touch()
+            (alternatives/'sudo').symlink_to(real_sudo)
+            (bin_dir/'sudo').symlink_to(alternatives/'sudo')
+            fixtures = root/'fixtures'
+            fixtures.mkdir()
+
+            self.assertEqual(
+                package_tool_mounts(fixtures, bin_dir),
+                ['--ro-bind', str(fixtures/'sudo'), str(real_sudo)],
+            )
 
 
 @unittest.skipUnless(BWRAP,'Bubblewrap unavailable; isolated CLI integration skipped')
@@ -99,8 +133,7 @@ atomic_json(ROOT/'manifests/applications.json',{'sddm':{}})
                 '--bind',str(self.case),str(self.case),
                 '--ro-bind',str(self.case/'etc'),'/etc',
                 # Even an accidental absolute invocation reaches a fixture.
-                *[arg for name in ['pacman','sudo'] if Path('/usr/bin',name).exists()
-                  for arg in ['--ro-bind',str(self.bin/name),str(Path('/usr/bin')/name)]],
+                *package_tool_mounts(self.bin),
                 '--chdir',str(self.project),*argv]
 
     def execute(self,argv,check=False,extra=None):
@@ -123,15 +156,22 @@ atomic_json(ROOT/'manifests/applications.json',{'sddm':{}})
             while time.monotonic()<deadline:
                 ready,_,_=select.select([master],[],[],0.1)
                 if ready:
-                    try:block=os.read(master,65536)
-                    except OSError:break
-                    if not block:break
+                    try:
+                        block = os.read(master, 65536)
+                    except OSError as exc:
+                        if exc.errno != errno.EIO:
+                            raise
+                        break  # Linux reports EIO when the slave terminal closes.
+                    if not block:
+                        break
                     output.extend(block)
-                if p.poll() is not None and not ready:break
-            if p.poll() is None:
-                p.kill();p.wait()
+
+            # The terminal may close while the process is still exiting.
+            try:
+                code = p.wait(timeout=max(0, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:
                 self.fail('PTY command timed out: '+output.decode(errors='replace'))
-            return p.returncode,output.decode(errors='replace')
+            return code, output.decode(errors='replace')
         finally:
             if p.poll() is None:p.kill();p.wait()
             os.close(master)
@@ -143,6 +183,17 @@ atomic_json(ROOT/'manifests/applications.json',{'sddm':{}})
     def mutation_calls(self):
         p=self.case/'package-calls.jsonl'
         return p.read_text().splitlines() if p.exists() else []
+
+    def test_pty_waits_for_process_exit_after_terminal_closes(self):
+        close_terminal = [
+            '/usr/bin/python3', '-c',
+            'import os, time; os.write(1, b"done"); '
+            'os.close(0); os.close(1); os.close(2); time.sleep(0.3)',
+        ]
+        with patch.object(self, 'command', return_value=close_terminal):
+            code, output = self.tty([], '')
+        self.assertEqual(code, 0)
+        self.assertEqual(output, 'done')
 
     def test_complete_install_validate_idempotence_and_rollback(self):
         plan=self.planned()
