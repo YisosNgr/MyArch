@@ -1,8 +1,10 @@
 """Content-addressed captures: exact bytes, explicit exclusions, no active writes."""
 from pathlib import Path
 import json
+import os
 import re
 from .resources import capture_references, verify_resources
+from .desktop_engine import capture_project, project_resource
 from .common import (ROOT, HOME, CONFIG, now, digest, atomic_json, atomic_bytes,
                      read_json, inside, expand_path, sensitive, record_file)
 
@@ -61,7 +63,7 @@ def snapshot_digest(data):
     return digest(json.dumps(body,sort_keys=True,ensure_ascii=False).encode())
 
 
-def capture():
+def capture(desktop_engine_source=None):
     manifest = read_json(ROOT/'manifests/dotfiles.json')
     entries = list(manifest['entries'])
     for name in ['scheme.json', 'sequences.txt']:
@@ -92,6 +94,16 @@ def capture():
                          'risks': entry.get('risks', []), 'size': len(data)})
     apps_path = ROOT/'manifests/applications.json'
     resources = capture_references(read_json(apps_path)) if apps_path.exists() else []
+    if desktop_engine_source is not None:
+        state_home = Path(os.environ.get('XDG_STATE_HOME') or HOME/'.local/state')
+        profiles = state_home/'desktop-engine/profiles.json'
+        resources.append(capture_project(desktop_engine_source, profiles))
+    elif (ROOT/'state/latest-capture.json').is_file():
+        previous_project = project_resource(load_snapshot())
+        if previous_project is not None:
+            if verify_resources([previous_project]):
+                raise ValueError('Previous Desktop Engine archive is unavailable; supply its source to refresh it')
+            resources.append(previous_project)
     body = {'schema': 2, 'resources': resources, 'created_at': now(), 'entries': accepted, 'excluded': excluded,
             'include_graph': manifest['include_graph'],
             'state': 'exported_exact_bytes; desired_state_requires_plan_review'}

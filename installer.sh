@@ -10,9 +10,10 @@ MYARCH — Personal Arch Linux Environment
 
 Usage: ./installer.sh [command] [options]
   audit                       Read-only system discovery; save private manifests
-  capture                     Capture audited configuration; never activate it
+  capture [--desktop-engine DIR]  Capture audited configuration and an optional private desktop project
   plan --profile desktop      Build a reviewable destination plan (repeatable)
   stage [--portable-only]      Restore exact files only inside MyArch/staging
+  install-desktop-engine       Install Desktop Manager from the bundle on a destination
   apply [--plan ID]            Destination only; requires typed confirmation
         [--resume TX]         Resume the same plan after inspecting failure
   validate [--plan ID]        Check stored hashes; optionally check destination

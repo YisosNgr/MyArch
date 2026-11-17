@@ -9,3 +9,5 @@ La configuración local de Caelestia requiere revisión antes de activarla en ot
 MyArch verificó el bundle, lo importó en una copia limpia y comparó el contenido y los permisos de los archivos restaurados en un directorio de pruebas. La instalación en una VM sigue pendiente de validación.
 
 Para probar esta captura en otro Arch Linux, usa el bundle privado del 17 de noviembre y sigue la [guía de instalación](INSTALLATION.md).
+
+El bundle posterior del mismo día incorpora Desktop Engine, con el gestor, los 18 temas del catálogo y 5 perfiles personales. La extracción y el lanzador se verificaron en un usuario simulado. Consulta la [guía de Desktop Engine](DESKTOP_ENGINE.md).

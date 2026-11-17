@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 from .common import ROOT, read_json, atomic_bytes
 from .audit import Audit
-from .engine import project_lock, stage, apply, rollback, backup_bundle, check_bundle, import_bundle, transaction_path
+from .engine import project_lock, stage, apply, rollback, backup_bundle, check_bundle, import_bundle, transaction_path, install_desktop_engine
 from .snapshot import capture
 from .plan import make_plan, source_guard, host_fingerprint, require_destination_host, load_plan
 from .validation import validate, compare, doctor
@@ -68,8 +68,10 @@ def report():
 def main():
     parser=argparse.ArgumentParser(description='MyArch — Personal Arch Linux Environment. Default actions are read-only or confined to MyArch.')
     sub=parser.add_subparsers(dest='command',required=True)
-    for name in ['audit','capture','doctor','report','profiles']:
+    for name in ['audit','doctor','report','profiles']:
         sub.add_parser(name)
+    sub.add_parser('capture').add_argument('--desktop-engine', type=Path)
+    sub.add_parser('install-desktop-engine').add_argument('--snapshot', default='latest')
     p=sub.add_parser('plan'); p.add_argument('--profile',action='append',default=[]); p.add_argument('--snapshot',default='latest');p.add_argument('--json',action='store_true')
     p=sub.add_parser('stage');p.add_argument('--snapshot',default='latest');p.add_argument('--dest',type=Path);p.add_argument('--portable-only',action='store_true')
     p=sub.add_parser('apply');p.add_argument('--plan',default='latest');p.add_argument('--resume')
@@ -87,7 +89,11 @@ def main():
                 raise ValueError('This checkout contains another source computer; audit the destination in a separate checkout')
             result=Audit().execute()
             report()
-        elif args.command=='capture':result=capture()
+        elif args.command=='capture':result=capture(desktop_engine_source=args.desktop_engine)
+        elif args.command=='install-desktop-engine':
+            require_destination_host()
+            confirmation('INSTALAR DESKTOP ENGINE')
+            result=install_desktop_engine(args.snapshot)
         elif args.command=='profiles':
             result={p.stem:read_json(p)['description'] for p in sorted((ROOT/'config/profiles').glob('*.json'))}
         elif args.command=='plan':

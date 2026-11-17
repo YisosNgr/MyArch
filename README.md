@@ -50,8 +50,11 @@ Perfiles combinables: `full`, `desktop`, `development`, `cybersecurity`, `gaming
 | `compare` | Diferencias de archivos y versiones sin corregirlas |
 | `backup` / `bundle-check DIR` | Bundle privado / comprobación de hashes |
 | `bundle-import DIR` | Recuperación en un checkout nuevo sin reemplazar inventarios distintos |
+| `install-desktop-engine` | Instala el gestor y sus perfiles desde un bundle que incluya Desktop Engine |
 | `rollback TX` | Deshace archivos de una transacción, preserva cambios posteriores |
 | `doctor` | Diagnóstico sin reparaciones automáticas |
+
+Desktop Engine puede viajar en el bundle junto con los temas y perfiles personales. Consulta la [guía de Desktop Engine](docs/DESKTOP_ENGINE.md).
 
 ## Privacidad y Git
 

@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 from .common import ROOT, HOME, CONFIG, now, digest, read_json, atomic_json, run, inside
 from .snapshot import load_snapshot, verify, safe_relative
+from .desktop_engine import project_resource
 
 
 def host_fingerprint():
@@ -193,6 +194,12 @@ def make_plan(names, snapshot_id='latest'):
                 if a['target_before'] == e['sha256'] and a['target_before_mode'] == e['mode']:
                     a.update(status='Skipped', reason='identical_content')
         actions.append(a)
+    if ({'desktop', 'all'} & configs) and project_resource(snapshot):
+        actions.append({
+            'kind': 'application', 'name': 'Desktop Engine', 'category': 'desktop',
+            'status': 'Requires manual action',
+            'reason': 'private_bundle_included: run ./installer.sh install-desktop-engine',
+        })
     apps_path=ROOT/'manifests/applications.json'
     if apps_path.exists():
         actions.extend(external_application_actions(read_json(apps_path),categories))

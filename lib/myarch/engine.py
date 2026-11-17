@@ -4,11 +4,13 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 from contextlib import contextmanager
 from .common import ROOT, HOME, CONFIG, now, atomic_json, atomic_bytes, read_json, digest, inside, sensitive
-from .resources import resource_path
+from .resources import resource_path, verify_resources
+from .desktop_engine import KIND, PROFILES, extract_project, launcher_content, profile_data, project_resource
 from .snapshot import load_snapshot, verify, blob_path, safe_relative, check_snapshot_metadata
 from .plan import (load_plan, target_file, host_fingerprint, require_destination_host,
                    inventory)
@@ -153,6 +155,10 @@ def stage(snapshot_id='latest',dest=None,portable_only=False):
     try:
         result=deploy(entries,tx)
         for resource in snap.get('resources',[]):
+            if resource.get('kind') == KIND:
+                restored = extract_project(resource_path(resource['sha256']), base/'desktop-engine')
+                result['desktop_engine'] = str(restored)
+                continue
             dest=base/'resources'/resource['sha256']/resource['name']
             write_target(dest,resource_path(resource['sha256']).read_bytes(),0o600,base/'resources')
         atomic_json(base/'resources/index.json',snap.get('resources',[]))
@@ -162,6 +168,64 @@ def stage(snapshot_id='latest',dest=None,portable_only=False):
         tx['status']='Failed'
         save(tx)
         raise
+
+
+def install_desktop_engine(snapshot_id='latest'):
+    require_destination_host()
+    project = project_resource(load_snapshot(snapshot_id))
+    if project is None:
+        raise ValueError('This snapshot does not include Desktop Engine')
+    if verify_resources([project]):
+        raise ValueError('Desktop Engine archive failed integrity verification')
+
+    sha = project['sha256']
+    destination = HOME/'.local/share/myarch/desktop-engine'/sha
+    data_home = Path(os.environ.get('XDG_DATA_HOME') or HOME/'.local/share')
+    launcher = data_home/'applications/desktop-engine-manager.desktop'
+    no_symlinks(destination/'desktop-manager', HOME)
+    no_symlinks(launcher, HOME)
+    payload = launcher_content(sha)
+    unchanged = False
+    if launcher.exists():
+        previous = launcher.read_bytes()
+        marker = re.search(rb'^X-MyArch-Desktop-Engine=([a-f0-9]{64})$', previous, re.M)
+        if not marker or previous != launcher_content(marker[1].decode()):
+            raise ValueError('Desktop Engine has an existing launcher outside MyArch management')
+        unchanged = previous == payload and (destination/'desktop-manager').is_file()
+
+    if not unchanged:
+        if destination.exists():
+            raise ValueError('Desktop Engine version path is already present without its managed launcher')
+        extract_project(resource_path(sha), destination)
+        try:
+            write_target(launcher, payload, 0o644, HOME)
+        except OSError:
+            # If publication failed before the atomic replace, allow a clean retry.
+            if not launcher.is_file() or launcher.read_bytes() != payload:
+                shutil.rmtree(destination)
+            raise
+
+    profiles_status = 'not_included'
+    if (destination/PROFILES).is_file():
+        profiles = profile_data(destination/PROFILES)
+        state_home = Path(os.environ.get('XDG_STATE_HOME') or HOME/'.local/state')
+        target = state_home/'desktop-engine/profiles.json'
+        no_symlinks(target, HOME)
+        profiles_status = 'existing_preserved'
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            # Publish the complete file without replacing a profile written concurrently.
+            with tempfile.TemporaryDirectory(dir=target.parent, prefix='.myarch-profiles-') as temp:
+                staged = Path(temp)/'profiles.json'
+                write_target(staged, profiles, 0o600, HOME)
+                try:
+                    os.link(staged, target)
+                except FileExistsError:
+                    pass
+                else:
+                    profiles_status = 'restored'
+    return {'desktop_engine': str(destination), 'launcher': str(launcher),
+            'status': 'unchanged' if unchanged else 'installed', 'profiles_status': profiles_status}
 
 
 def apply(plan_id='latest',resume=None):
