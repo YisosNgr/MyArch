@@ -114,6 +114,37 @@ class Isolated(unittest.TestCase):
         parent=next(e for e in result['entries'] if e['source'].endswith('/hyprland.conf'))
         self.assertEqual(parent['restore'],'manual_review')
 
+    def test_quickshell_audit_keeps_live_config_out_of_desktop_engine_backups(self):
+        quickshell = self.config / 'quickshell'
+        live = quickshell / 'caelestia/shell.qml'
+        backup = quickshell / '.desktop-engine-backup-pilot.ABC123/caelestia/shell.qml'
+        for path in (live, backup):
+            path.parent.mkdir(parents=True)
+            path.write_text('import QtQuick\n')
+
+        result = audit.Audit().configurations()
+
+        sources = {entry['source'] for entry in result['entries']}
+        self.assertIn('~/.config/quickshell/caelestia/shell.qml', sources)
+        self.assertNotIn(
+            '~/.config/quickshell/.desktop-engine-backup-pilot.ABC123/caelestia/shell.qml',
+            sources,
+        )
+
+    def test_local_caelestia_shell_is_captured_for_manual_review(self):
+        shell = self.config / 'quickshell/caelestia/shell.qml'
+        shell.parent.mkdir(parents=True)
+        shell.write_text('import QtQuick\n')
+
+        manifest = audit.Audit().configurations()
+        common.atomic_json(self.root / 'manifests/dotfiles.json', manifest)
+        capture = snapshot.load_snapshot(snapshot.capture()['id'])
+
+        entry = next(item for item in capture['entries']
+                     if item['path'] == 'config/quickshell/caelestia/shell.qml')
+        self.assertEqual(entry['restore'], 'manual_review')
+        self.assertIn('quickshell_local_shell_review', entry['risks'])
+
     def test_profile_deduplication_and_cycles(self):
         cats,_,_,info=plan.profiles(['desktop','laptop','desktop'])
         self.assertEqual(cats,{'desktop'})

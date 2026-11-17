@@ -206,7 +206,11 @@ class Audit:
                 files.append(root)
             elif root.is_dir():
                 for parent, dirs, names in os.walk(root, followlinks=False):
-                    dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not sensitive(d))
+                    dirs[:] = sorted(
+                        directory for directory in dirs
+                        if directory not in SKIP_DIRS and not sensitive(directory)
+                        and not (name == 'quickshell' and directory.startswith('.desktop-engine-backup-'))
+                    )
                     files.extend(Path(parent) / n for n in sorted(names))
                     # Directory symlinks are recorded explicitly, never silently traversed.
                     files.extend(Path(parent) / n for n in dirs if (Path(parent) / n).is_symlink())
@@ -248,6 +252,9 @@ class Audit:
                 risk.append('hardware_specific')
             if p.is_relative_to(CONFIG / 'sunshine') or p.is_relative_to(CONFIG / 'systemd') or p.is_relative_to(CONFIG / 'autostart'):
                 risk.append('service_or_streaming_manual')
+            # Local Caelestia QML can execute commands and depend on excluded assets.
+            if p.is_relative_to(CONFIG / 'quickshell/caelestia'):
+                risk.append('quickshell_local_shell_review')
             if p.suffix == '.lua':
                 risk.append('lua_dynamic_dependency_review')
             e['risks'] = risk
